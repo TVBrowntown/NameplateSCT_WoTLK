@@ -516,23 +516,23 @@ end
 ------------
 
 local damageSpellEvents = {
-	DAMAGE_SHIELD = true,
-	SPELL_DAMAGE = true,
-	SPELL_PERIODIC_DAMAGE = true,
-	SPELL_BUILDING_DAMAGE = true,
-	RANGE_DAMAGE = true
+	["DAMAGE_SHIELD"] = true,
+	["SPELL_DAMAGE"] = true,
+	["SPELL_PERIODIC_DAMAGE"] = true,
+	["SPELL_BUILDING_DAMAGE"] = true,
+	["RANGE_DAMAGE"] = true
 }
 
 local missedSpellEvents = {
-	SPELL_MISSED = true,
-	SPELL_PERIODIC_MISSED = true,
-	RANGE_MISSED = true,
-	SPELL_BUILDING_MISSED = true
+	["SPELL_MISSED"] = true,
+	["SPELL_PERIODIC_MISSED"] = true,
+	["RANGE_MISSED"] = true,
+	["SPELL_BUILDING_MISSED"] = true
 }
 
 local healSpellEvents = {
-	SPELL_HEAL = true,
-	SPELL_PERIODIC_HEAL = true
+	["SPELL_HEAL"] = true,
+	["SPELL_PERIODIC_HEAL"] = true
 }
 
 local COMBATLOG_OBJECT_TYPE_PET = COMBATLOG_OBJECT_TYPE_PET or 0x00001000
@@ -761,7 +761,16 @@ end
 function NameplateSCT:DisplayText(guid, text, size, alpha, animation, spellId, pow, spellName)
 	local fontString, icon
 
-	local nameplate = self:GetNameplate(guid)
+	-- Try Blizzard-native mapping first
+	local nameplate = self:GetBlizzNameplateFrameByGUID(guid)
+	-- Fallback to active nameplate tracking
+	if not nameplate then
+		nameplate = self:GetActiveNameplateByGUID(guid)
+	end
+	-- Fallback to legacy logic
+	if not nameplate then
+		nameplate = self:GetNameplate(guid)
+	end
 	if not nameplate then return end
 
 	fontString = getFontString()
@@ -1463,4 +1472,67 @@ end
 function NameplateSCT:RegisterMenu()
 	LibStub("AceConfigRegistry-3.0"):RegisterOptionsTable("NameplateSCT", menu)
 	self.menu = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("NameplateSCT", "NameplateSCT")
+end
+
+-- Track all currently visible nameplates
+NameplateSCT.activeNameplates = {}
+
+local function OnNameplateShow(_, frame)
+    NameplateSCT.activeNameplates[frame] = true
+end
+
+local function OnNameplateHide(_, frame)
+    NameplateSCT.activeNameplates[frame] = nil
+end
+
+LibNameplates:RegisterCallback("LibNameplates_NewNameplate", OnNameplateShow)
+LibNameplates:RegisterCallback("LibNameplates_RecycleNameplate", OnNameplateHide)
+
+-- Blizzard-native nameplate GUID mapping
+local blizz_nameplates = {}
+
+local function OnNamePlateUnitAdded(unit)
+    local guid = UnitGUID(unit)
+    if guid then
+        blizz_nameplates[guid] = unit
+        blizz_nameplates[unit] = guid
+    end
+end
+
+local function OnNamePlateUnitRemoved(unit)
+    local guid = blizz_nameplates[unit]
+    if guid then
+        blizz_nameplates[guid] = nil
+    end
+    blizz_nameplates[unit] = nil
+end
+
+-- Register for Blizzard nameplate events
+NameplateSCT.frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+NameplateSCT.frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+NameplateSCT.frame:HookScript("OnEvent", function(self, event, ...)
+    if event == "NAME_PLATE_UNIT_ADDED" then
+        OnNamePlateUnitAdded(...)
+    elseif event == "NAME_PLATE_UNIT_REMOVED" then
+        OnNamePlateUnitRemoved(...)
+    end
+end)
+
+-- Helper: get Blizzard nameplate frame for a GUID
+function NameplateSCT:GetBlizzNameplateFrameByGUID(guid)
+    local unit = blizz_nameplates[guid]
+    if unit and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+        return C_NamePlate.GetNamePlateForUnit(unit)
+    end
+    return nil
+end
+
+-- Helper: get frame for a GUID from tracked nameplates
+function NameplateSCT:GetActiveNameplateByGUID(guid)
+    for frame in pairs(self.activeNameplates) do
+        if LibNameplates:GetGUID(frame) == guid then
+            return frame
+        end
+    end
+    return nil
 end
