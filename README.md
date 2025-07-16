@@ -1,6 +1,10 @@
 # NameplateSCT - WoTLK
 This adds the same style of SCT to your personal frame or anchored to your screen (depending on what is enabled).
 
+## Requirements
+
+You will NEED https://github.com/someweirdhuman/awesome_wotlk for this version to work
+
 ## Install
 
 1. [Download the package.](https://github.com/bkader/NameplateSCT_WoTLK/archive/refs/heads/main.zip)
